@@ -25,13 +25,13 @@ jobs:
           password: ${{ secrets.DOCKER_LOGIN_PASSWORD }}
 
       - name: Build and push multi-arch
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
           file: ./Dockerfile-bookworm
           tags: xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm
-          build-args: |
+          secrets: |
             GIT_USER=${{ secrets.GIT_USER }}
             GIT_TOKEN=${{ secrets.GIT_TOKEN }}
