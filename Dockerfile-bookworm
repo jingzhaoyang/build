@@ -1,0 +1,152 @@
+FROM debian:bookworm-20250721 AS builder
+LABEL maintainer="Seven Du <dujinfang@x-y-t.cn>"
+
+SHELL ["/bin/bash", "-c"]
+
+RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
+RUN apt-get update && apt-get install -y \
+  --no-install-recommends --no-install-suggests --fix-missing \
+  ca-certificates curl locales bison librrd-dev iputils-ping \
+  unixodbc sqlite3 odbc-postgresql libnftables-dev \
+  build-essential automake autoconf 'libtool-bin|libtool' wget curl \
+  perl python3 uuid-dev zlib1g-dev libjpeg-dev librdkafka1 \
+  libncurses5-dev libssl-dev libpcre3-dev libcurl4-openssl-dev \
+  libedit-dev libspeexdsp-dev libspeexdsp-dev libnetfilter-conntrack-dev \
+  libsqlite3-dev libgdbm-dev libdb-dev libvlc-dev pkg-config \
+  libsndfile1-dev libopus-dev lua5.2-dev libtiff-dev libfreetype6\
+  libpng16-16 yasm nasm libavformat-dev libswscale-dev libavfilter-dev \
+  libavutil-dev libswresample-dev libshout-dev libmpg123-dev libmp3lame-dev  \
+  libmagickcore-dev libldns-dev libmariadb-dev rrdtool gnupg \
+  unixodbc-dev sqlite3 odbc-postgresql libhiredis-dev swig \
+  libpq-dev libpcap-dev librabbitmq-dev librabbitmq4 librdkafka-dev \
+  libprotobuf-c-dev libprotobuf-dev protobuf-c-compiler protobuf-compiler \
+  libopencore-amrwb-dev libvo-amrwbenc-dev libopencore-amrnb-dev libopencore-amrnb0 openssh-client python3-dev \
+  clang llvm-dev valgrind gnupg2 clang-tools lua-rrd lua5.2 libgd-dev \
+  cmake git tig htop procps gdb vim ngrep sngrep meson ninja-build libfdk-aac-dev
+
+COPY lib/* /tmp/lib/
+RUN arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+        arm64) arch_str="-arm" ;; \
+    esac; \
+    cd /tmp/lib; \
+    mv libopenh264-2.1.1-linux${arch_str}64.6.so /usr/local/lib/libopenh264.so
+
+RUN cd /tmp && git clone https://git.xswitch.cn/xswitch/libks-xyt.git libks && \
+  cd libks && cmake . -DCMAKE_INSTALL_PREFIX:PATH=/usr/local && make -j $(nproc --all) && make install && cd /tmp && rm -rf /tmp/libks
+
+ARG GIT_USER
+ARG GIT_TOKEN
+RUN cd /tmp && git clone -b rebase050811 --depth=1 https://${GIT_USER}:${GIT_TOKEN}@git.xswitch.cn/xyt/sofia-sip.git && \
+  cd sofia-sip && ./bootstrap.sh && ./configure && make -j $(nproc --all) && make install && rm -rf /tmp/sofia-sip
+
+RUN cd /tmp && git clone -b v3.6.1-release --depth=1 https://git.xswitch.cn/xswitch/nats.c.git && \
+  cd nats.c && cmake . -DNATS_BUILD_WITH_TLS=ON -DNATS_BUILD_STREAMING=ON && \
+  make -j $(nproc --all) && make install && cd /tmp && rm -rf /tmp/nats.c
+
+RUN cd /tmp && git clone -b libfvad-new --depth=1 https://git.xswitch.cn/xswitch/libfvad.git && \
+  cd libfvad && autoreconf -i && ./configure && make && make install && rm -rf /tmp/libfvad
+
+RUN cd /tmp && git clone --depth=1 https://git.xswitch.cn/xswitch/spandsp.git && \
+  cd spandsp && ./bootstrap.sh && ./configure && make -j $(nproc --all) && make install && rm -rf /tmp/spandsp
+
+RUN cd /tmp && git clone --depth=1 https://git.xswitch.cn/xswitch/raft.git && \
+  cd raft && autoreconf -i && ./configure --disable-uv --disable-lz4 && make -j $(nproc --all) && make install && rm -rf /tmp/raft
+
+RUN cd /tmp && git clone --depth=1 https://git.xswitch.cn/xswitch/mp4v2.git && \
+  cd mp4v2 && autoreconf -i && ./configure && make -j $(nproc --all) && make install && rm -rf /tmp/mp4v2
+
+RUN cd /tmp &&  git clone --depth=1 https://github.com/sqids/sqids-c && cd sqids && ./bootstrap && ./configure && make -j $(nproc --all) && \
+	make install && \
+	cd .. && \
+	rm -rf sqids
+
+RUN cd /tmp && \
+		wget https://www.unimrcp.org/project/component-view/unimrcp-deps-1-6-0-tar-gz/download -O unimrcp-deps-1.6.0.tar.gz && \
+		tar xvzf unimrcp-deps-1.6.0.tar.gz && \
+    cd unimrcp-deps-1.6.0 && \
+    cd libs/apr && \
+    ./configure --prefix=/usr/local/mrcp --enable-shared=no --with-pic && \
+    make -j $(nproc --all) && \
+    make install && \
+    cd ../apr-util && \
+    ./configure --prefix=/usr/local/mrcp --enable-shared=no --with-apr=/usr/local/mrcp && \
+    make -j $(nproc --all) && \
+    make install && \
+    cd .. && \
+    rm -rf unimrcp-deps*
+
+ENV PKG_CONFIG_PATH=/usr/local/freeswitch/lib/pkgconfig:/usr/local/mrcp/lib/pkgconfig
+RUN cd /tmp && git clone -b unimrcp-1.8.0 https://git.xswitch.cn/xswitch/unimrcp && \
+    cd unimrcp && \
+    ./bootstrap && \
+    ./configure --prefix=/usr/local/mrcp \
+    --enable-shared=no \
+    --with-apr=/usr/local/mrcp \
+    --with-apr-util=/usr/local/mrcp \
+    --with-pic=yes \
+    --disable-client-app \
+    --disable-umc \
+    --disable-asr-client \
+    --disable-server-lib \
+    --disable-server-app \
+    --disable-demosynth-plugin \
+    --disable-demorecog-plugin \
+    --disable-demoverifier-plugin \
+    --disable-recorder-plugin && \
+    make -j $(nproc --all) && \
+    make install && \
+    cd .. && \
+    rm -rf unimrcp
+
+RUN cd /tmp && git clone --depth=1 https://github.com/ittner/lua-gd.git && \
+     cd lua-gd && \
+    sed -i 's:LUABIN=lua5.1:LUABIN=/usr/bin/lua5.2:g' Makefile && \
+    sed -i 's:LUAPKG=lua5.1:LUAPKG=lua5.2:g' Makefile && \
+    sed -i 's:#OUTFILE=gd.so:CFLAGS+=-I /usr/include/lua5.2:g' Makefile && \
+    make install && cd / && rm -rf /tmp/lua-gd
+
+RUN cd /opt && git clone --depth=1 https://github.com/vlang/v.git && cd v && make && /opt/v/v symlink
+
+# Final stage
+FROM debian:bookworm-20250721
+LABEL maintainer="Seven Du <dujinfang@x-y-t.cn>"
+
+SHELL ["/bin/bash", "-c"]
+RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
+RUN apt-get update && apt-get install -y \
+  --no-install-recommends --no-install-suggests --fix-missing \
+  ca-certificates curl locales bison librrd-dev iputils-ping \
+  unixodbc sqlite3 odbc-postgresql libnftables-dev \
+  build-essential automake autoconf 'libtool-bin|libtool' wget curl \
+  perl python3 uuid-dev zlib1g-dev libjpeg-dev librdkafka1 \
+  libncurses5-dev libssl-dev libpcre3-dev libcurl4-openssl-dev \
+  libedit-dev libspeexdsp-dev libspeexdsp-dev libnetfilter-conntrack-dev \
+  libsqlite3-dev libgdbm-dev libdb-dev libvlc-dev pkg-config \
+  libsndfile1-dev libopus-dev lua5.2-dev libtiff-dev libfreetype6\
+  libpng16-16 yasm nasm libavformat-dev libswscale-dev libavfilter-dev \
+  libavutil-dev libswresample-dev libshout-dev libmpg123-dev libmp3lame-dev  \
+  libmagickcore-dev libldns-dev libmariadb-dev rrdtool gnupg \
+  unixodbc-dev sqlite3 odbc-postgresql libhiredis-dev swig \
+  libpq-dev libpcap-dev librabbitmq-dev librabbitmq4 librdkafka-dev \
+  libprotobuf-c-dev libprotobuf-dev protobuf-c-compiler protobuf-compiler \
+  libopencore-amrwb-dev libvo-amrwbenc-dev libopencore-amrnb-dev libopencore-amrnb0 openssh-client python3-dev \
+  clang llvm-dev valgrind gnupg2 clang-tools lua-rrd lua5.2 libgd-dev \
+  cmake git tig htop procps gdb vim ngrep sngrep meson ninja-build \
+  && rm -rf /var/lib/apt/lists/* \
+  && locale-gen en_US en_US.UTF-8 \
+  && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 \
+  && rm -rf /usr/share/doc \
+  && rm -rf /usr/share/gtk-doc \
+  && rm -rf /usr/share/man
+
+COPY --from=builder /usr/local /usr/local
+
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+ENV LC_ALL en_US.utf-8
+
+# force use a proxy if github connection fails
+# ENV HTTPS_PROXY=http://192.168.3.80:38201
+
+WORKDIR /usr/src
