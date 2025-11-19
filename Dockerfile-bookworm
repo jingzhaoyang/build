@@ -56,7 +56,7 @@ RUN cd /tmp && git clone --depth=1 https://git.xswitch.cn/xswitch/raft.git && \
 RUN cd /tmp && git clone --depth=1 https://git.xswitch.cn/xswitch/mp4v2.git && \
   cd mp4v2 && autoreconf -i && ./configure && make -j $(nproc --all) && make install && rm -rf /tmp/mp4v2
 
-RUN cd /tmp &&  git clone --depth=1 https://github.com/sqids/sqids-c && cd sqids && ./bootstrap && ./configure && make -j $(nproc --all) && \
+RUN cd /tmp &&  git clone --depth=1 https://github.com/sqids/sqids-c sqids && cd sqids && ./bootstrap && ./configure && make -j $(nproc --all) && \
 	make install && \
 	cd .. && \
 	rm -rf sqids
