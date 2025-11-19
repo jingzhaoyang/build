@@ -5,17 +5,11 @@ on:
       - 'main'
 
 jobs:
-  docker:
+  build-amd64:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
       - name: Login to TCR
         uses: docker/login-action@v3
@@ -24,14 +18,56 @@ jobs:
           username: ${{ secrets.DOCKER_LOGIN_USER }}
           password: ${{ secrets.DOCKER_LOGIN_PASSWORD }}
 
-      - name: Build and push multi-arch
-        uses: docker/build-push-action@v6
+      - name: Build and push amd64 image
+        run: |
+          docker build -t xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm-amd64 \
+            --build-arg GIT_USER=${{ secrets.GIT_USER }} \
+            --build-arg GIT_TOKEN=${{ secrets.GIT_TOKEN }} \
+            -f ./Dockerfile-bookworm .
+          docker push xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm-amd64
+
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to TCR
+        uses: docker/login-action@v3
         with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          file: ./Dockerfile-bookworm
-          tags: xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm
-          build-args: |
-            GIT_USER=${{ secrets.GIT_USER }}
-            GIT_TOKEN=${{ secrets.GIT_TOKEN }}
+          registry: xswitch.tencentcloudcr.com
+          username: ${{ secrets.DOCKER_LOGIN_USER }}
+          password: ${{ secrets.DOCKER_LOGIN_PASSWORD }}
+
+      - name: Build and push arm64 image
+        run: |
+          docker build -t xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm-arm64 \
+            --build-arg GIT_USER=${{ secrets.GIT_USER }} \
+            --build-arg GIT_TOKEN=${{ secrets.GIT_TOKEN }} \
+            -f ./Dockerfile-bookworm .
+          docker push xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm-arm64
+
+  merge-manifest:
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to TCR
+        uses: docker/login-action@v3
+        with:
+          registry: xswitch.tencentcloudcr.com
+          username: ${{ secrets.DOCKER_LOGIN_USER }}
+          password: ${{ secrets.DOCKER_LOGIN_PASSWORD }}
+
+      - name: Install Docker CLI (if needed)
+        run: |
+          if ! command -v docker > /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y docker.io
+          fi
+
+      - name: Create and push manifest list
+        run: |
+          docker manifest create xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm \
+            xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm-amd64 \
+            xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm-arm64
+          docker manifest push xswitch.tencentcloudcr.com/xswitch/xswitch:bookworm
