@@ -132,7 +132,7 @@ RUN apt-get update && apt-get install -y \
   libprotobuf-c-dev libprotobuf-dev protobuf-c-compiler protobuf-compiler \
   libopencore-amrwb-dev libvo-amrwbenc-dev libopencore-amrnb-dev libopencore-amrnb0 openssh-client python3-dev \
   clang llvm-dev valgrind gnupg2 clang-tools lua-rrd lua5.2 libgd-dev \
-  cmake git tig htop procps gdb vim ngrep sngrep meson ninja-build \
+  cmake git tig htop procps gdb vim ngrep sngrep meson ninja-build libfdk-aac-dev libabsl-dev libwebrtc-audio-processing-dev \
   && rm -rf /var/lib/apt/lists/* \
   && locale-gen en_US en_US.UTF-8 \
   && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 \
